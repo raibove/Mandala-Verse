@@ -13,6 +13,9 @@ const MandalaDrawing = () => {
   const [currentBatch, setCurrentBatch] = useState([]);  // Store current drawing actions
   const [lastPoint, setLastPoint] = useState(null);
 
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1000);
+
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
 
@@ -27,9 +30,7 @@ const MandalaDrawing = () => {
     context.lineCap = 'round';
     contextRef.current = context;
 
-    // Fill canvas with initial background color
-    context.fillStyle = backgroundColor;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    clearCanvas()
   }, []);
 
   const startDrawing = (e) => {
@@ -179,17 +180,56 @@ const draw = (e) => {
     setBatches([]);
     setCurrentBatch([]);
     setBatchIndex(0);
+
+    addColorToBatch('bgColor', backgroundColor);
   };
 
   const handleColorChange = (e) => {
     setBrushColor(e.target.value);
     contextRef.current.strokeStyle = e.target.value;
+    
+   addColorToBatch('brushColor', newColor)
   };
+
+  const addColorToBatch = (property, color)=>{
+    const crr = [{ type: property, color: color }];
+    const newBatches = [...batches.slice(0, batchIndex), crr];
+    setBatches(newBatches);
+    setBatchIndex(newBatches.length);
+  }
 
   const handleBgColorChange = (e) => {
     const newColor = e.target.value;
+   
     setBackgroundColor(newColor);
     redrawCanvas(batchIndex, newColor);
+    addColorToBatch('bgColor', newColor);
+  };
+
+  const replay = async () => {
+    setIsReplaying(true);
+    const ctx = contextRef.current;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      for (const action of batch) {
+        if(action.type === 'bgColor') {
+          redrawCanvas(i, action.color);
+        }
+        else if (action.type === 'brushColor') {
+          ctx.strokeStyle = action.color;
+        } else if (action.type === 'start') {
+          ctx.beginPath();
+          ctx.moveTo(action.x, action.y);
+        } else if (action.type === 'draw') {
+          await new Promise(resolve => setTimeout(resolve, 0 / replaySpeed));
+          drawLine(ctx, action.x1, action.y1, action.x2, action.y2);
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 0 / replaySpeed));
+    }
+    setIsReplaying(false);
   };
 
   return (
@@ -279,6 +319,16 @@ const draw = (e) => {
             <button onClick={undo} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Undo</button>
             <button onClick={redo} className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Redo</button>
           </div>
+
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={replay}
+              disabled={isReplaying}
+              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
+            >
+              {isReplaying ? 'Replaying...' : 'Replay'}
+            </button>
+            </div>
         </div>
       </div>
 
