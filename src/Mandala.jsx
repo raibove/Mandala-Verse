@@ -7,7 +7,7 @@ const MandalaDrawing = () => {
   const [brushColor, setBrushColor] = useState('#000000');
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
   const [isRadialSymmetryEnabled, setIsRadialSymmetryEnabled] = useState(true);
-  const [isMirrorEnabled, setIsMirrorEnabled] = useState(false);
+  const [isMirrorEnabled, setIsMirrorEnabled] = useState(true);
   const [batches, setBatches] = useState([]);  // Store grouped actions
   const [batchIndex, setBatchIndex] = useState(0);  // Track current position for undo/redo
   const [currentBatch, setCurrentBatch] = useState([]);  // Store current drawing actions
@@ -15,9 +15,13 @@ const MandalaDrawing = () => {
 
   const [isReplaying, setIsReplaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1000);
+  
+  const [videoURL, setVideoURL] = useState(null);
 
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
+
+  const mediaRecorderRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -34,6 +38,7 @@ const MandalaDrawing = () => {
   }, []);
 
   const startDrawing = (e) => {
+    if(isReplaying) return;
     const { offsetX, offsetY } = getCoordinates(e);
     contextRef.current.beginPath();
     contextRef.current.moveTo(offsetX, offsetY);
@@ -45,7 +50,7 @@ const MandalaDrawing = () => {
   };
 
 const draw = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || isReplaying) return;
 
     const { offsetX, offsetY } = getCoordinates(e);
     const ctx = contextRef.current;
@@ -181,19 +186,19 @@ const draw = (e) => {
     setCurrentBatch([]);
     setBatchIndex(0);
 
-    addColorToBatch('bgColor', backgroundColor);
+    addColorToBatch([{ type: 'bgColor', color: backgroundColor }, {type: 'brushColor', color: brushColor}])
   };
 
   const handleColorChange = (e) => {
     setBrushColor(e.target.value);
     contextRef.current.strokeStyle = e.target.value;
     
-   addColorToBatch('brushColor', newColor)
+    addColorToBatch([{type: 'brushColor', color: e.target.value}])
   };
 
-  const addColorToBatch = (property, color)=>{
-    const crr = [{ type: property, color: color }];
-    const newBatches = [...batches.slice(0, batchIndex), crr];
+  const addColorToBatch = (newBatch)=>{
+    console.log('<< btch', batches)
+    const newBatches = [...batches.slice(0, batchIndex), newBatch];
     setBatches(newBatches);
     setBatchIndex(newBatches.length);
   }
@@ -203,14 +208,34 @@ const draw = (e) => {
    
     setBackgroundColor(newColor);
     redrawCanvas(batchIndex, newColor);
-    addColorToBatch('bgColor', newColor);
+    addColorToBatch([{type: 'bgColor', color: newColor}])
   };
 
-  const replay = async () => {
+  const replayAndRecord = async () => {
     setIsReplaying(true);
     const ctx = contextRef.current;
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
+    const canvas = canvasRef.current;
+    const stream = canvas.captureStream(60); // 60 FPS
+    const recordedChunks = [];
+    mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+    mediaRecorderRef.current.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    mediaRecorderRef.current.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      setVideoURL(url);
+    };
+
+    mediaRecorderRef.current.start();
+
+    console.log(batches)
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       for (const action of batch) {
@@ -229,6 +254,9 @@ const draw = (e) => {
       }
       await new Promise(resolve => setTimeout(resolve, 0 / replaySpeed));
     }
+
+    
+    mediaRecorderRef.current.stop();
     setIsReplaying(false);
   };
 
@@ -311,18 +339,26 @@ const draw = (e) => {
           <button
             onClick={clearCanvas}
             className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            disabled={isReplaying}
           >
             Clear
           </button>
 
           <div className="flex gap-4 justify-center">
-            <button onClick={undo} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Undo</button>
-            <button onClick={redo} className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Redo</button>
+            <button 
+            onClick={undo} 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            disabled={isReplaying}
+            >Undo</button>
+            <button onClick={redo} 
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            disabled={isReplaying}
+            >Redo</button>
           </div>
 
           <div className="flex gap-4 justify-center">
             <button
-              onClick={replay}
+              onClick={replayAndRecord}
               disabled={isReplaying}
               className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
             >
@@ -331,7 +367,19 @@ const draw = (e) => {
             </div>
         </div>
       </div>
-
+      {videoURL && (
+            <div className="mt-4">
+              <h2 className="text-lg font-semibold mb-2">Exported Video:</h2>
+              <video src={videoURL} controls className="w-full max-w-md" />
+              <a
+                href={videoURL}
+                download="mandala-drawing.webm"
+                className="mt-2 inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Download Video
+              </a>
+            </div>
+          )}
       <canvas
         ref={canvasRef}
         onMouseDown={startDrawing}
