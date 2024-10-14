@@ -16,7 +16,7 @@ const MandalaDrawing = () => {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1000);
   
-  const [videoURL, setVideoURL] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -230,7 +230,7 @@ const draw = (e) => {
     mediaRecorderRef.current.onstop = () => {
       const blob = new Blob(recordedChunks, { type: 'video/webm' });
       const url = URL.createObjectURL(blob);
-      setVideoURL(url);
+      uploadToPinata(blob);
     };
 
     mediaRecorderRef.current.start();
@@ -259,6 +259,33 @@ const draw = (e) => {
     mediaRecorderRef.current.stop();
     setIsReplaying(false);
   };
+
+  
+  const uploadToPinata = async (blob) => {
+    setUploadStatus('Uploading to Pinata...');
+
+    const formData = new FormData();
+    const filename = `mandala-${Date.now()}.webm`;
+    formData.append('file', blob, filename);
+
+    try {
+      const response = await fetch('https://mandala-verse-bknd.yikew40375.workers.dev/', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadStatus(`Upload successful! IPFS Hash: ${result.ipfsHash}`);
+      } else {
+        setUploadStatus(`Upload failed: ${result.error}`);
+      }
+    } catch (error) {
+      setUploadStatus(`Upload error: ${error.message}`);
+    }
+  };
+
 
   return (
     <div className="flex flex-col items-center p-4 bg-gray-100 min-h-screen">
@@ -367,19 +394,6 @@ const draw = (e) => {
             </div>
         </div>
       </div>
-      {videoURL && (
-            <div className="mt-4">
-              <h2 className="text-lg font-semibold mb-2">Exported Video:</h2>
-              <video src={videoURL} controls className="w-full max-w-md" />
-              <a
-                href={videoURL}
-                download="mandala-drawing.webm"
-                className="mt-2 inline-block px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                Download Video
-              </a>
-            </div>
-          )}
       <canvas
         ref={canvasRef}
         onMouseDown={startDrawing}
