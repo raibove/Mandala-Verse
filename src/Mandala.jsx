@@ -197,7 +197,6 @@ const draw = (e) => {
   };
 
   const addColorToBatch = (newBatch)=>{
-    console.log('<< btch', batches)
     const newBatches = [...batches.slice(0, batchIndex), newBatch];
     setBatches(newBatches);
     setBatchIndex(newBatches.length);
@@ -235,7 +234,6 @@ const draw = (e) => {
 
     mediaRecorderRef.current.start();
 
-    console.log(batches)
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       for (const action of batch) {
